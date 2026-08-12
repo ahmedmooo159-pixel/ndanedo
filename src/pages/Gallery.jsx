@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Upload, Plus } from 'lucide-react';
-import { db, storage } from '../firebase';
+import { db } from '../firebase';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
-// Cloudinary config
+// ─── Cloudinary config ───
 const CLOUD_NAME = "nfzcflqv";
 const API_KEY = "443252812965861";
 const API_SECRET = "J862RsJelEP049KZ382R2iSot4Y";
@@ -19,59 +17,114 @@ const generateSignature = async (timestamp) => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-const staticGalleryItems = [];
+// ─── 3D Carousel ───
+const Carousel3D = ({ items, currentIndex, setCurrentIndex }) => {
+  const total = items.length;
+  if (total === 0) return null;
 
-const Gallery = () => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [firestoreItems, setFirestoreItems] = useState([]);
-  const [showUploadForm, setShowUploadForm] = useState(false);
-  
-  // Upload states
+  const getStyle = (i) => {
+    const offset = ((i - currentIndex + total) % total);
+    const angle = (360 / total) * offset;
+    const rad = (angle * Math.PI) / 180;
+    const radius = Math.min(300, window.innerWidth * 0.38);
+    const x = Math.sin(rad) * radius;
+    const z = Math.cos(rad) * radius - radius;
+    const scale = 0.55 + 0.45 * Math.cos(rad);
+    const opacity = 0.3 + 0.7 * ((Math.cos(rad) + 1) / 2);
+    const isActive = offset === 0;
+    return { x, z, scale, opacity, isActive, zIndex: Math.round(scale * 10) };
+  };
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      height: '420px',
+      perspective: '900px',
+      perspectiveOrigin: '50% 50%',
+      overflow: 'hidden',
+      marginBottom: '16px'
+    }}>
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        transformStyle: 'preserve-3d',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        {items.map((item, i) => {
+          const { x, z, scale, opacity, isActive, zIndex } = getStyle(i);
+          return (
+            <motion.div
+              key={item.id || i}
+              onClick={() => setCurrentIndex(i)}
+              animate={{ x, scale, opacity }}
+              transition={{ type: 'spring', stiffness: 200, damping: 28 }}
+              style={{
+                position: 'absolute',
+                width: isActive ? '280px' : '200px',
+                zIndex,
+                cursor: 'pointer',
+                borderRadius: '18px',
+                overflow: 'hidden',
+                boxShadow: isActive
+                  ? '0 20px 60px rgba(212,175,55,0.4), 0 0 40px rgba(128,0,32,0.3)'
+                  : '0 8px 20px rgba(0,0,0,0.4)',
+                border: isActive ? '2px solid #d4af37' : '1px solid rgba(255,255,255,0.1)',
+                transition: 'width 0.4s ease'
+              }}
+            >
+              {/* Media */}
+              <div style={{ width: '100%', height: isActive ? '280px' : '200px', transition: 'height 0.4s ease', background: '#1a0006' }}>
+                {item.type === 'video' ? (
+                  <video src={item.url} controls={isActive} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <img src={item.url} alt="ذكرى" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
+              </div>
+
+              {/* Caption - only on active */}
+              <AnimatePresence>
+                {isActive && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    style={{
+                      padding: '14px',
+                      background: 'linear-gradient(135deg, rgba(128,0,32,0.95), rgba(94,25,20,0.95))',
+                      color: '#fff',
+                      textAlign: 'center',
+                      fontSize: '0.95rem',
+                      lineHeight: 1.6,
+                      fontWeight: 600
+                    }}
+                  >
+                    {item.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── Upload Form ───
+const UploadForm = ({ onUploaded, onCancel }) => {
   const [file, setFile] = useState(null);
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    // Fetch items from Firestore
-    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const items = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() });
-      });
-      setFirestoreItems(items);
-    }, (error) => {
-      console.log("Error fetching gallery items:", error);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const galleryItems = [...staticGalleryItems, ...firestoreItems];
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % galleryItems.length);
-  };
-
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + galleryItems.length) % galleryItems.length);
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
-  };
-
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
-
     setUploading(true);
-    setProgress(10); // Fake initial progress since fetch doesn't support progress events easily
+    setProgress(10);
 
     try {
       const isVideo = file.type.startsWith('video/');
@@ -85,141 +138,281 @@ const Gallery = () => {
       formData.append('signature', signature);
 
       const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${isVideo ? 'video' : 'image'}/upload`;
+      setProgress(30);
 
-      const response = await fetch(uploadUrl, {
-        method: 'POST',
-        body: formData
-      });
-
+      const response = await fetch(uploadUrl, { method: 'POST', body: formData });
       const data = await response.json();
 
       if (data.secure_url) {
-        setProgress(100);
+        setProgress(80);
         await addDoc(collection(db, 'gallery'), {
           url: data.secure_url,
-          text: text,
+          text,
           type: isVideo ? 'video' : 'image',
           createdAt: serverTimestamp()
         });
-
-        setUploading(false);
-        setShowUploadForm(false);
-        setFile(null);
-        setText('');
-        setProgress(0);
-        setCurrentIndex(galleryItems.length);
+        setProgress(100);
+        onUploaded();
       } else {
-        throw new Error(data.error?.message || "فشل الرفع");
+        throw new Error(data.error?.message || 'فشل الرفع');
       }
-    } catch (error) {
-      console.error("Upload error:", error);
+    } catch (err) {
+      console.error(err);
+      alert('حصلت مشكلة: ' + err.message);
+    } finally {
       setUploading(false);
-      alert('حصلت مشكلة أثناء الرفع: ' + error.message);
     }
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, y: -50 }}
-      transition={{ duration: 0.6 }}
-      style={{ width: '100%', maxWidth: '800px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}
+    <motion.form
+      onSubmit={handleUpload}
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      style={{
+        background: 'rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.2)',
+        borderRadius: '16px',
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        marginBottom: '20px',
+        width: '100%',
+        backdropFilter: 'blur(10px)'
+      }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '20px' }}>
-        <h2 style={{ color: 'var(--gold)', fontSize: '2rem', textShadow: '0 2px 10px rgba(0,0,0,0.5)', margin: 0 }}>
-          أجمل ذكرياتنا 📸
-        </h2>
-        <button 
-          onClick={() => setShowUploadForm(!showUploadForm)}
-          className="glass-button" 
-          style={{ padding: '10px', display: 'flex', alignItems: 'center', gap: '5px' }}
+      <p style={{ color: '#d4af37', fontWeight: 700, textAlign: 'center', fontSize: '1.1rem' }}>
+        ➕ ضيف ذكرى جديدة
+      </p>
+      <input
+        type="file"
+        accept="image/*,video/*"
+        onChange={e => setFile(e.target.files[0])}
+        required
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          color: '#fff',
+          borderRadius: '10px',
+          padding: '10px',
+          width: '100%',
+          cursor: 'pointer'
+        }}
+      />
+      <input
+        type="text"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        placeholder="اكتب الموقف أو الكلام الحلو..."
+        required
+        style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          color: '#fff',
+          borderRadius: '10px',
+          padding: '12px 16px',
+          width: '100%',
+          fontFamily: 'Cairo, sans-serif',
+          fontSize: '1rem',
+          outline: 'none'
+        }}
+      />
+      {uploading && (
+        <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '10px', overflow: 'hidden', height: '8px' }}>
+          <motion.div
+            animate={{ width: `${progress}%` }}
+            style={{ height: '100%', background: 'linear-gradient(90deg, #800020, #d4af37)', borderRadius: '10px' }}
+          />
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button
+          type="submit"
+          disabled={uploading}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: uploading ? 'rgba(255,255,255,0.1)' : 'linear-gradient(45deg, #800020, #d4af37)',
+            border: '1px solid #d4af37',
+            color: uploading ? '#aaa' : '#fff',
+            borderRadius: '30px',
+            fontWeight: 700,
+            cursor: uploading ? 'not-allowed' : 'pointer',
+            fontFamily: 'Cairo, sans-serif',
+            fontSize: '1rem'
+          }}
         >
-          <Plus size={20} /> ضيف ذكرى
+          {uploading ? `بيترفع... ${progress}%` : 'ارفع ❤️'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: '12px 20px',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            color: '#fff',
+            borderRadius: '30px',
+            cursor: 'pointer',
+            fontFamily: 'Cairo, sans-serif'
+          }}
+        >
+          إلغاء
+        </button>
+      </div>
+    </motion.form>
+  );
+};
+
+// ─── Main Gallery ───
+const Gallery = () => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [items, setItems] = useState([]);
+  const [showUpload, setShowUpload] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, snap => {
+      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => console.error(err));
+    return unsub;
+  }, []);
+
+  const prev = () => setCurrentIndex(i => (i - 1 + items.length) % items.length);
+  const next = () => setCurrentIndex(i => (i + 1) % items.length);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{
+        width: '100%',
+        maxWidth: '760px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '10px 12px 40px'
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        marginBottom: '20px',
+        flexWrap: 'wrap',
+        gap: '10px'
+      }}>
+        <h2 style={{ color: '#d4af37', fontSize: 'clamp(1.4rem, 5vw, 2rem)', margin: 0 }}>
+          ذكرياتنا الحلوة 📸
+        </h2>
+        <button
+          onClick={() => setShowUpload(v => !v)}
+          style={{
+            background: 'linear-gradient(45deg, #800020, #d4af37)',
+            border: '1px solid #d4af37',
+            color: '#fff',
+            padding: '10px 20px',
+            borderRadius: '30px',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontFamily: 'Cairo, sans-serif',
+            fontSize: '0.95rem'
+          }}
+        >
+          ➕ ضيف ذكرى
         </button>
       </div>
 
+      {/* Upload Form */}
       <AnimatePresence>
-        {showUploadForm && (
-          <motion.form 
-            onSubmit={handleUpload}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="glass-panel"
-            style={{ width: '100%', padding: '20px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}
-          >
-            <input type="file" onChange={handleFileChange} accept="image/*,video/*" className="glass-input" required />
-            <input 
-              type="text" 
-              value={text} 
-              onChange={(e) => setText(e.target.value)} 
-              placeholder="اكتب كلام حلو للصورة أو الفيديو..." 
-              className="glass-input" 
-              required 
-            />
-            <button type="submit" className="glass-button" disabled={uploading}>
-              {uploading ? `بيترفع... ${progress}%` : 'ارفع الذكرى ❤️'}
-            </button>
-          </motion.form>
+        {showUpload && (
+          <UploadForm
+            onUploaded={() => { setShowUpload(false); setCurrentIndex(Math.max(0, items.length)); }}
+            onCancel={() => setShowUpload(false)}
+          />
         )}
       </AnimatePresence>
-      
-      {galleryItems.length > 0 ? (
-        <div className="glass-panel" style={{ position: 'relative', width: '100%', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          
-          <div style={{ position: 'relative', width: '100%', height: '50vh', minHeight: '300px', maxHeight: '500px', overflow: 'hidden', borderRadius: '15px' }}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentIndex}
-                initial={{ opacity: 0, x: 100 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{ duration: 0.5 }}
-                style={{ width: '100%', height: '100%', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
-              >
-                {galleryItems[currentIndex].type === 'video' ? (
-                  <video 
-                    src={galleryItems[currentIndex].url} 
-                    controls 
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                ) : (
-                  <img
-                    src={galleryItems[currentIndex].url}
-                    alt="Memory"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
 
-          <motion.p 
-            key={`text-${currentIndex}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            style={{ marginTop: '20px', fontSize: '1.2rem', color: '#fff', textAlign: 'center', fontWeight: 'bold' }}
-          >
-            {galleryItems[currentIndex].text}
-          </motion.p>
+      {/* 3D Carousel */}
+      {items.length > 0 ? (
+        <>
+          <Carousel3D items={items} currentIndex={currentIndex} setCurrentIndex={setCurrentIndex} />
 
-          <div style={{ display: 'flex', gap: '15px', marginTop: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button onClick={handlePrev} className="glass-button" style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 20px' }}>
-              <ChevronRight size={20} /> اللي قبله
+          {/* Navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button
+              onClick={prev}
+              style={{
+                background: 'linear-gradient(45deg, #800020, #900020)',
+                border: '1px solid #d4af37',
+                color: '#d4af37',
+                padding: '10px 24px',
+                borderRadius: '30px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontFamily: 'Cairo, sans-serif',
+                fontSize: '1rem'
+              }}
+            >
+              ❮ السابق
             </button>
-            <span style={{ display: 'flex', alignItems: 'center', color: 'var(--gold)', fontWeight: 'bold' }}>
-              {currentIndex + 1} / {galleryItems.length}
+            <span style={{ color: '#d4af37', fontWeight: 700 }}>
+              {currentIndex + 1} / {items.length}
             </span>
-            <button onClick={handleNext} className="glass-button" style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 20px' }}>
-              اللي بعده <ChevronLeft size={20} />
+            <button
+              onClick={next}
+              style={{
+                background: 'linear-gradient(45deg, #800020, #900020)',
+                border: '1px solid #d4af37',
+                color: '#d4af37',
+                padding: '10px 24px',
+                borderRadius: '30px',
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontFamily: 'Cairo, sans-serif',
+                fontSize: '1rem'
+              }}
+            >
+              التالي ❯
             </button>
           </div>
-        </div>
-      ) : (
-        <p style={{ color: '#fff', textAlign: 'center' }}>مفيش صور لسه، ضيف أول ذكرى ليكم! ❤️</p>
-      )}
 
+          {/* Dot indicators */}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {items.map((_, i) => (
+              <motion.div
+                key={i}
+                onClick={() => setCurrentIndex(i)}
+                animate={{ scale: i === currentIndex ? 1.4 : 1, background: i === currentIndex ? '#d4af37' : 'rgba(255,255,255,0.3)' }}
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  cursor: 'pointer'
+                }}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <motion.div
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 2, repeat: Infinity }}
+          style={{
+            textAlign: 'center',
+            padding: '60px 20px',
+            color: 'rgba(255,255,255,0.7)'
+          }}
+        >
+          <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📷</div>
+          <p style={{ fontSize: '1.2rem' }}>مفيش ذكريات لسه، ضيف أول صورة ليكم! ❤️</p>
+        </motion.div>
+      )}
     </motion.div>
   );
 };

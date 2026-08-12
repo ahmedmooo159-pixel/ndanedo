@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import Login from './pages/Login';
 import Questions from './pages/Questions';
@@ -25,10 +25,21 @@ function AnimatedRoutes() {
 function App() {
   return (
     <Router>
-      <div className="relative w-full min-h-screen overflow-hidden">
+      <div style={{ position: 'relative', width: '100%', minHeight: '100vh', overflow: 'hidden' }}>
         <FloatingHearts />
         <BackgroundMusic />
-        <div className="relative z-10 w-full min-h-screen flex flex-col items-center justify-center p-4">
+        <div style={{
+          position: 'relative',
+          zIndex: 10,
+          width: '100%',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          boxSizing: 'border-box'
+        }}>
           <AnimatedRoutes />
         </div>
       </div>
