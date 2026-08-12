@@ -1,0 +1,39 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
+import Login from './pages/Login';
+import Questions from './pages/Questions';
+import Gallery from './pages/Gallery';
+import Cake from './pages/Cake';
+import FloatingHearts from './components/FloatingHearts';
+import BackgroundMusic from './components/BackgroundMusic';
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<Login />} />
+        <Route path="/questions" element={<Questions />} />
+        <Route path="/gallery" element={<Gallery />} />
+        <Route path="/cake" element={<Cake />} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <div className="relative w-full min-h-screen overflow-hidden">
+        <FloatingHearts />
+        <BackgroundMusic />
+        <div className="relative z-10 w-full min-h-screen flex flex-col items-center justify-center p-4">
+          <AnimatedRoutes />
+        </div>
+      </div>
+    </Router>
+  );
+}
+
+export default App;
