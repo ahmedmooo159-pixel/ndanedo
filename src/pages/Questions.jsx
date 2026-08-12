@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const questions = [
-  { id: 1, question: "اكتبي سؤالك الأول هنا..." },
+  { id: 1, question: "  إيه أحلى لحظة قضيتيها معايا؟" },
   { id: 2, question: "اكتبي سؤالك الثاني هنا..." },
   { id: 3, question: "اكتبي سؤالك الثالث هنا..." },
   { id: 4, question: "اكتبي سؤالك الرابع هنا..." },

@@ -304,19 +304,59 @@ const Cake = () => {
                 كل سنة وانتي أحلى ندانيدو ❤️
               </motion.h1>
 
+              {/* Decorative romantic display instead of broken image */}
               <div style={{
                 width: '100%',
-                height: '220px',
+                height: '180px',
                 borderRadius: '16px',
-                overflow: 'hidden',
                 marginBottom: '18px',
-                border: '3px solid #d4af37'
+                border: '2px solid #d4af37',
+                background: 'linear-gradient(135deg, rgba(128,0,32,0.6), rgba(212,175,55,0.2))',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                overflow: 'hidden',
+                position: 'relative'
               }}>
-                <img
-                  src="/assets/IMG-20250709-WA0062.jpg"
-                  alt="ندانيدو"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
+                {/* Animated floating hearts */}
+                {['❤️','💕','💖','💗','💝','🌹','✨','💫'].map((emoji, i) => (
+                  <motion.span
+                    key={i}
+                    animate={{
+                      y: [0, -120],
+                      x: [0, (i % 2 === 0 ? 30 : -30)],
+                      opacity: [0, 1, 0],
+                      scale: [0.5, 1.2, 0.5]
+                    }}
+                    transition={{
+                      duration: 3,
+                      delay: i * 0.4,
+                      repeat: Infinity,
+                      ease: 'easeInOut'
+                    }}
+                    style={{
+                      position: 'absolute',
+                      bottom: '10px',
+                      left: `${10 + (i * 11)}%`,
+                      fontSize: '1.5rem',
+                      pointerEvents: 'none'
+                    }}
+                  >
+                    {emoji}
+                  </motion.span>
+                ))}
+                <motion.div
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                  style={{ fontSize: '4rem', zIndex: 1 }}
+                >
+                  💑
+                </motion.div>
+                <p style={{ color: '#d4af37', fontWeight: 700, fontSize: '1rem', zIndex: 1 }}>
+                  أنا وانتي ❤️
+                </p>
               </div>
 
               <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.9)', marginBottom: '22px' }}>
