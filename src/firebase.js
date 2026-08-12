@@ -5,9 +5,9 @@ import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAqtprLIvUuzDFhfkg9s386zGLoOlf876k",
-  authDomain: "nadanedobd.firebaseapp.com",
-  projectId: "nadanedobd",
-  storageBucket: "nadanedobd.firebasestorage.app",
+  authDomain: "nadanedoBD.firebaseapp.com",
+  projectId: "nadanedoBD",
+  storageBucket: "nadanedoBD.firebasestorage.app",
   messagingSenderId: "647570557156",
   appId: "1:647570557156:web:27d457ff9f8ee8eaa084f1",
   measurementId: "G-SHEZVWS307"
