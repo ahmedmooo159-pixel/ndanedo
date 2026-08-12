@@ -6,10 +6,8 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const questions = [
   { id: 1, question: "  إيه أحلى لحظة قضيتيها معايا؟" },
-  { id: 2, question: "اكتبي سؤالك الثاني هنا..." },
-  { id: 3, question: "اكتبي سؤالك الثالث هنا..." },
-  { id: 4, question: "اكتبي سؤالك الرابع هنا..." },
-  { id: 5, question: "اكتبي سؤالك الخامس هنا..." }
+  { id: 2, question: "ايه لسه محققنهوش عايزه نحقهه مع بعض؟" },
+  { id: 3, question: "قولي رساله نفتكرها في عيد ميلادك ال جاي " },
 ];
 
 const Questions = () => {
