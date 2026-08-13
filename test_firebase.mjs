@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, getDocs } from "firebase/firestore";
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAqtprLIvUuzDFhfkg9s386zGLoOlf876k",
@@ -13,17 +13,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-async function testFirebase() {
-  console.log("Testing Firestore Connection...");
+async function testWrite() {
+  console.log("Testing Firestore Write...");
   try {
-    const querySnapshot = await getDocs(collection(db, "gallery"));
-    console.log("Success! Found", querySnapshot.size, "documents in gallery.");
-    querySnapshot.forEach((doc) => {
-      console.log(doc.id, " => ", doc.data());
+    const docRef = await addDoc(collection(db, "gallery"), {
+      test: true,
+      text: "Testing write",
+      createdAt: serverTimestamp()
     });
+    console.log("Success! Wrote doc with ID: ", docRef.id);
   } catch (error) {
-    console.error("Firestore Read Error:", error.message);
+    console.error("Firestore Write Error:", error.message);
   }
 }
 
-testFirebase();
+testWrite();
