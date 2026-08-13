@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { db } from '../firebase';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot } from 'firebase/firestore';
 
 // ─── Cloudinary config ───
 const CLOUD_NAME = "nfzcflqv";
 const API_KEY = "443252812965861";
 const API_SECRET = "J862RsJelEP049KZ382R2iSot4Y";
-const GALLERY_TAG = "nadanedo_gallery";
 
-const generateSignature = async (paramsObj) => {
-  // Sort params alphabetically and build the string
-  const sortedKeys = Object.keys(paramsObj).sort();
-  const str = sortedKeys.map(k => `${k}=${paramsObj[k]}`).join('&') + API_SECRET;
+const generateSignature = async (timestamp) => {
+  const str = `timestamp=${timestamp}${API_SECRET}`;
   const encoder = new TextEncoder();
   const data = encoder.encode(str);
   const hashBuffer = await crypto.subtle.digest('SHA-1', data);
@@ -54,7 +53,7 @@ const Carousel3D = ({ items, currentIndex, setCurrentIndex }) => {
           const { x, scale, opacity, isActive, zIndex } = getStyle(i);
           return (
             <motion.div
-              key={item.public_id || i}
+              key={item.id || i}
               onClick={() => setCurrentIndex(i)}
               animate={{ x, scale, opacity }}
               transition={{ type: 'spring', stiffness: 180, damping: 25 }}
@@ -73,15 +72,15 @@ const Carousel3D = ({ items, currentIndex, setCurrentIndex }) => {
               }}
             >
               <div style={{ width: '100%', height: isActive ? '280px' : '190px', transition: 'height 0.4s ease', background: '#1a0006' }}>
-                {item.resource_type === 'video' ? (
-                  <video src={item.secure_url} controls={isActive} muted={!isActive} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {item.type === 'video' ? (
+                  <video src={item.url} controls={isActive} muted={!isActive} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <img src={item.secure_url} alt="ذكرى" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={item.url} alt="ذكرى" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 )}
               </div>
 
               <AnimatePresence>
-                {isActive && item.caption && (
+                {isActive && item.text && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -96,7 +95,7 @@ const Carousel3D = ({ items, currentIndex, setCurrentIndex }) => {
                       fontWeight: 600
                     }}
                   >
-                    {item.caption}
+                    {item.text}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -124,32 +123,31 @@ const UploadForm = ({ onUploaded, onCancel }) => {
     try {
       const isVideo = file.type.startsWith('video/');
       const timestamp = Math.floor(Date.now() / 1000);
-
-      const paramsToSign = {
-        context: `caption=${text}`,
-        tags: GALLERY_TAG,
-        timestamp: timestamp.toString()
-      };
-
-      const signature = await generateSignature(paramsToSign);
+      const signature = await generateSignature(timestamp);
 
       const formData = new FormData();
       formData.append('file', file);
       formData.append('api_key', API_KEY);
       formData.append('timestamp', timestamp);
       formData.append('signature', signature);
-      formData.append('tags', GALLERY_TAG);
-      formData.append('context', `caption=${text}`);
 
       const resourceType = isVideo ? 'video' : 'image';
       const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
 
-      setProgress(30);
-
+      setProgress(40);
       const response = await fetch(uploadUrl, { method: 'POST', body: formData });
       const data = await response.json();
 
       if (data.secure_url) {
+        setProgress(80);
+        // Save metadata to Firestore instead of Cloudinary tags!
+        await addDoc(collection(db, 'gallery'), {
+          url: data.secure_url,
+          text: text,
+          type: resourceType,
+          createdAt: serverTimestamp()
+        });
+
         setProgress(100);
         onUploaded();
       } else {
@@ -272,35 +270,19 @@ const Gallery = () => {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
 
-  const fetchGallery = async () => {
-    setLoading(true);
-    try {
-      // Use Cloudinary's client-side list-by-tag endpoint
-      const url = `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${GALLERY_TAG}.json`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const data = await res.json();
-        const galleryItems = (data.resources || []).map(r => ({
-          ...r,
-          secure_url: `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${r.public_id}.${r.format}`,
-          caption: r.context?.custom?.caption || '',
-          resource_type: r.resource_type || 'image'
-        }));
-        setItems(galleryItems);
-      } else {
-        console.log('List endpoint not enabled or no images yet');
-        setItems([]);
-      }
-    } catch (err) {
-      console.error('Error fetching gallery:', err);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchGallery();
+    // Listen to Firestore for realtime updates! No more Cloudinary list restrictions.
+    const q = query(collection(db, 'gallery'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const fetchedItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setItems(fetchedItems);
+      setLoading(false);
+    }, (error) => {
+      console.error("Firestore error:", error);
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, []);
 
   const prev = () => setCurrentIndex(i => (i - 1 + items.length) % items.length);
@@ -355,7 +337,7 @@ const Gallery = () => {
       <AnimatePresence>
         {showUpload && (
           <UploadForm
-            onUploaded={() => { setShowUpload(false); fetchGallery(); }}
+            onUploaded={() => { setShowUpload(false); setCurrentIndex(items.length); }}
             onCancel={() => setShowUpload(false)}
           />
         )}
@@ -368,7 +350,7 @@ const Gallery = () => {
           transition={{ duration: 1.5, repeat: Infinity }}
           style={{ textAlign: 'center', padding: '60px 20px', color: '#d4af37', fontSize: '1.2rem' }}
         >
-          بتحمّل الذكريات... 💕
+          بنجيب أحلى الذكريات... 💕
         </motion.div>
       ) : items.length > 0 ? (
         <>
@@ -433,10 +415,7 @@ const Gallery = () => {
         >
           <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📷</div>
           <p style={{ fontSize: '1.1rem', lineHeight: 1.8 }}>
-            مفيش ذكريات لسه! اضغط على "ضيف ذكرى" وارفع أول صورة ليكم ❤️
-          </p>
-          <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)', marginTop: '10px' }}>
-            لو رفعت صور قبل كده ومش ظاهرة، فعّل "Resource list" من إعدادات Cloudinary
+            مفيش ذكريات لسه! اضغطي على "ضيف ذكرى" وارفعي أول صورة ليكم ❤️
           </p>
         </motion.div>
       )}
